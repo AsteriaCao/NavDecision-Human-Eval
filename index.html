@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NavDecision Human Eval</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #fff;
+      --line: #d8dee8;
+      --text: #151b23;
+      --muted: #667085;
+      --accent: #1f6feb;
+      --soft: #eaf2ff;
+      --bad: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background: var(--bg);
+      font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,255,255,.96);
+      backdrop-filter: blur(8px);
+    }
+    h1 { margin: 0; font-size: 18px; letter-spacing: 0; }
+    h2 { margin: 0; padding: 9px 11px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    h3 { margin: 16px 0 8px; font-size: 14px; }
+    button, select, textarea, input { font: inherit; }
+    button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+      padding: 7px 10px;
+      cursor: pointer;
+    }
+    button.primary { border-color: var(--accent); background: var(--accent); color: #fff; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    main { width: min(1680px, 100%); margin: 0 auto; padding: 14px; }
+    .toolbar, .choices, .score-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .status, .muted { color: var(--muted); }
+    .case-nav {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .case-nav button { padding: 6px 0; min-width: 0; }
+    .case-nav button.active { border-color: var(--accent); background: var(--soft); color: var(--accent); font-weight: 700; }
+    .case-nav button.done::after { content: "✓"; margin-left: 3px; color: #067647; }
+    .workspace { display: grid; gap: 10px; align-items: start; }
+    .visual-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      align-items: start;
+    }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
+    }
+    .content { padding: 10px; }
+    .image-wrap { display: grid; place-items: center; min-height: 150px; background: #eef1f5; }
+    .image-wrap img { display: block; width: 100%; height: auto; max-height: 28vh; object-fit: contain; }
+    .token {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+    .qa-label { margin: 12px 0 4px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .qa-text { margin: 0; white-space: pre-wrap; }
+    .choice {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .score-row { margin: 6px 0 10px; justify-content: space-between; }
+    .score-row .score-label { flex: 1 1 170px; font-weight: 650; }
+    .score-row .choices { flex: 0 0 auto; }
+    .field { margin-bottom: 9px; }
+    .desc { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; font-weight: 400; }
+    textarea { width: 100%; min-height: 64px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+    select { min-width: 180px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; background: #fff; }
+    details { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+    pre { margin: 8px 0 0; padding: 10px; border-radius: 6px; background: #f2f4f7; overflow: auto; max-height: 260px; }
+    .pill { display: inline-block; padding: 2px 7px; border-radius: 999px; background: var(--soft); color: var(--accent); font-weight: 650; }
+    .error { color: var(--bad); padding: 18px; border: 1px solid #f1b8b5; border-radius: 8px; background: #fff4f3; }
+    @media (max-width: 1100px) {
+      header { flex-direction: column; }
+      .visual-grid, .form-grid { grid-template-columns: 1fr; }
+      .image-wrap img { max-height: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>NavDecision 数据质量人工评估</h1>
+      <div class="status" id="status">Loading manifest...</div>
+    </div>
+    <div class="toolbar">
+      <button id="prevBtn" type="button">Prev</button>
+      <button id="nextBtn" type="button">Next</button>
+      <button id="exportJsonlBtn" type="button">Export JSONL</button>
+      <button id="submitBtn" type="button" class="primary">Submit JSONL</button>
+      <button id="clearBtn" type="button">Clear Local</button>
+    </div>
+  </header>
+  <main>
+    <div id="error" class="error" hidden></div>
+    <nav class="case-nav" id="caseNav" aria-label="Cases"></nav>
+    <section class="workspace" id="workspace" hidden>
+      <div class="visual-grid">
+        <article class="panel"><h2>Left View <span class="desc">左前侧相机，主要看左侧车道/盲区/相邻车辆。</span></h2><div class="image-wrap"><img id="leftImage" alt="left camera"></div></article>
+        <article class="panel"><h2>Front View <span class="desc">前视相机，主要看当前车道、前车、信号灯和路口。</span></h2><div class="image-wrap"><img id="frontImage" alt="front camera"></div></article>
+        <article class="panel"><h2>Right View <span class="desc">右前侧相机，主要看右侧车道/盲区/相邻车辆。</span></h2><div class="image-wrap"><img id="rightImage" alt="right camera"></div></article>
+        <article class="panel"><h2>BEV Map + GT Trajectory <span class="desc">鸟瞰地图和真实未来轨迹，用于判断转向/变道/停车是否一致。</span></h2><div class="image-wrap"><img id="bevImage" alt="bev map with trajectory"></div></article>
+      </div>
+      <article class="panel">
+        <h2>QA Pair & GPT Score <span class="desc">模型生成的问答，以及自动评分；人工评分以图像和事实为准。</span></h2>
+        <div class="content">
+          <div class="token"><span id="caseOrder"></span><span id="token"></span></div>
+          <p><span class="pill" id="actionGroup"></span> <span class="muted" id="actionState"></span></p>
+          <div class="qa-label">Question</div><p class="qa-text" id="question"></p>
+          <div class="qa-label">Answer</div><p class="qa-text" id="answer"></p>
+          <div class="qa-label">GPT Score</div>
+          <div id="gptSummary"></div>
+          <details>
+            <summary>GPT subscores / diagnosis <span class="desc">展开可查看自动评分的各子项和诊断理由。</span></summary>
+            <pre id="gptDetail"></pre>
+          </details>
+        </div>
+      </article>
+      <div class="form-grid">
+        <article class="panel"><h2>A. Overall Quality <span class="desc">整体质量 1~5 分，5 最好。</span></h2><div class="content"><div id="likertFields"></div></div></article>
+        <article class="panel"><h2>B/C. Hallucination & Leakage <span class="desc">核查幻觉实体、属性错误、显著遗漏和未来信息泄漏。</span></h2><div class="content"><h3>B. 幻觉核查</h3><div id="hallucinationFields"></div><h3>C. 泄漏核查</h3><div id="leakageFields"></div></div></article>
+        <article class="panel"><h2>D/E. Relabel & Reasoning <span class="desc">独立判断动作/加速度，并核查理由是否真实、是否支撑决策。</span></h2><div class="content"><h3>D. 独立重标</h3><div id="relabelFields"></div><h3>E. 推理正确性细项</h3><div id="reasoningFields"></div></div></article>
+        <article class="panel"><h2>F. Primary Error Type <span class="desc">该样本最主要的问题类型，可多选；没有问题选 None。</span></h2><div class="content"><div id="errorFields"></div><h3>Notes</h3><textarea id="notes" placeholder="Optional notes"></textarea></div></article>
+      </div>
+    </section>
+  </main>
+  <script>
+    const schema = {
+      likert: [
+        ["a1_scene_correctness", "A1 Scene Correctness", "场景与实体描述是否与三视图一致。"],
+        ["a2_action_correctness", "A2 Action Correctness", "决策动作、转向和速度是否在当前场景下合理。"],
+        ["a3_reasoning_correctness", "A3 Reasoning Correctness", "理由是否事实正确，并能支撑该决策。"],
+        ["a4_safety", "A4 Safety", "决策是否安全，是否避免碰撞和危险交互。"],
+        ["a5_overall", "A5 Overall", "综合质量评分，不要只因文笔流畅而给高分。"]
+      ],
+      radios: [
+        ["b1_nonexistent_entities", "B1 Nonexistent Entities", "文本提到但图像里不存在的实体数量。", ["0", "1", ">=2"]],
+        ["b2_entity_attribute_error", "B2 Entity Attribute Error", "已有实体的颜色、车道、运动状态等属性是否错误。", ["无错", "有错"]],
+        ["b3_significant_agent_missing", "B3 Significant Agent Missing", "图像中影响驾驶决策的显著 agent 是否被遗漏。", ["无遗漏", "有遗漏"]],
+        ["c1_future_leakage", "C1 Future Leakage", "是否包含仅凭当前/历史图像和 ego state 无法得知的未来具体信息。", ["无", "有"]],
+        ["d1_driving_command", "D1 Driving Command", "你独立判断的横向/方向动作。", ["Turn Left", "Turn Right", "Straight", "Change Lane", "Stop"]],
+        ["d2_driving_acceleration", "D2 Driving Acceleration", "你独立判断的速度趋势。", ["Accelerate", "Decelerate", "Maintain Speed"]],
+        ["e1_fact_premise_truth", "E1 Fact Premise Truth", "理由中引用的事实前提是否属实，例如绿灯、有前车、旁车位置。", ["全部属实", "部分错误", "大部分错误"]],
+        ["e2_reason_supports_decision", "E2 Reason Supports Decision", "这些理由在逻辑上是否支撑答案里的驾驶决策。", ["支撑", "部分支撑", "不支撑或矛盾"]]
+      ],
+      checks: [
+        ["c2_leakage_types", "C2 Leakage Types", "泄漏的具体类型，可多选。", ["无", "精确未来速度值", "精确转角度数", "把未来结果当既成事实陈述", "其他"]],
+        ["f_primary_error_types", "Primary Error Type", "该样本最主要的问题类型，可多选；无问题选 None。", [
+          ["None", "无明显问题。"],
+          ["Scene mismatch", "场景或实体描述与三视图不一致。"],
+          ["Hallucination", "提到了图像中不存在的实体、标志、信号或事件。"],
+          ["Trajectory mismatch", "答案动作与 BEV GT 轨迹趋势明显不一致。"],
+          ["Wrong direction", "转向/直行/变道方向判断错误。"],
+          ["Wrong acceleration", "加速、减速、保持速度判断错误。"],
+          ["Wrong reasoning", "理由事实错误、逻辑不成立或与答案矛盾。"],
+          ["Leakage", "包含仅凭输入无法得知的未来具体信息。"],
+          ["Too generic", "答案过泛，缺少关键场景约束或具体决策。"],
+          ["Unsafe behavior", "决策可能导致碰撞、违反交通规则或危险交互。"],
+          ["Over-cautious", "过度保守，明显影响通行效率且缺少必要原因。"],
+          ["Language issue", "语言表达、翻译、格式或可读性问题。"],
+          ["Other", "其他无法归入以上类别的问题，请在 Notes 说明。"]
+        ]]
+      ]
+    };
+    const state = { cases: [], index: 0, annotations: {}, storageKey: "navtest-human-eval-v2" };
+    const el = id => document.getElementById(id);
+    const allFields = [
+      ...schema.likert.map(x => x[0]),
+      ...schema.radios.map(x => x[0]),
+      ...schema.checks.map(x => x[0]),
+      "notes"
+    ];
+
+    function emptyAnnotation(token) {
+      const ann = { token, updated_at: "" };
+      allFields.forEach(f => ann[f] = f === "c2_leakage_types" || f === "f_primary_error_types" ? [] : "");
+      return ann;
+    }
+    function loadLocal() {
+      try { state.annotations = JSON.parse(localStorage.getItem(state.storageKey) || "{}"); }
+      catch { state.annotations = {}; }
+    }
+    function saveLocal() { localStorage.setItem(state.storageKey, JSON.stringify(state.annotations)); }
+    function currentCase() { return state.cases[state.index]; }
+    function currentAnnotation() {
+      const item = currentCase();
+      if (!state.annotations[item.token]) state.annotations[item.token] = emptyAnnotation(item.token);
+      return state.annotations[item.token];
+    }
+    function isDone(token) {
+      const ann = state.annotations[token];
+      if (!ann) return false;
+      const likertDone = schema.likert.every(([field]) => ann[field]);
+      const radioDone = schema.radios.every(([field]) => ann[field]);
+      const checkDone = schema.checks.every(([field]) => Array.isArray(ann[field]) && ann[field].length > 0);
+      return Boolean(likertDone && radioDone && checkDone);
+    }
+    function allDone() { return state.cases.length > 0 && state.cases.every(item => isDone(item.token)); }
+    function radioHTML(field, label, desc, options) {
+      return `<div class="field"><div><strong>${label}</strong><span class="desc">${desc}</span></div><div class="choices">${options.map(opt =>
+        `<label class="choice"><input type="radio" name="${field}" value="${opt}">${opt}</label>`).join("")}</div></div>`;
+    }
+    function optionValue(opt) { return Array.isArray(opt) ? opt[0] : opt; }
+    function optionLabel(opt) {
+      if (!Array.isArray(opt)) return opt;
+      return `${opt[0]}<span class="desc">${opt[1]}</span>`;
+    }
+    function checkHTML(field, label, desc, options) {
+      return `<div class="field"><div><strong>${label}</strong><span class="desc">${desc}</span></div><div class="choices">${options.map(opt =>
+        `<label class="choice"><input type="checkbox" name="${field}" value="${optionValue(opt)}">${optionLabel(opt)}</label>`).join("")}</div></div>`;
+    }
+    function initForm() {
+      el("likertFields").innerHTML = schema.likert.map(([field, label, desc]) =>
+        `<div class="score-row"><span class="score-label">${label}<span class="desc">${desc}</span></span><span class="choices">${[1,2,3,4,5].map(v =>
+          `<label class="choice"><input type="radio" name="${field}" value="${v}">${v}</label>`).join("")}</span></div>`).join("");
+      el("hallucinationFields").innerHTML = schema.radios.slice(0, 3).map(x => radioHTML(...x)).join("");
+      el("leakageFields").innerHTML = radioHTML(...schema.radios[3]) + checkHTML(...schema.checks[0]);
+      el("relabelFields").innerHTML = schema.radios.slice(4, 6).map(x => radioHTML(...x)).join("");
+      el("reasoningFields").innerHTML = schema.radios.slice(6).map(x => radioHTML(...x)).join("");
+      el("errorFields").innerHTML = checkHTML(...schema.checks[1]);
+      document.querySelectorAll("input").forEach(input => input.addEventListener("change", persistCurrent));
+      el("notes").addEventListener("input", persistCurrent);
+    }
+    function checkedValues(name) {
+      return [...document.querySelectorAll(`input[name='${name}']:checked`)].map(x => x.value);
+    }
+    function setRadio(name, value) {
+      document.querySelectorAll(`input[name='${name}']`).forEach(input => input.checked = input.value === String(value));
+    }
+    function setChecks(name, values) {
+      const set = new Set(values || []);
+      document.querySelectorAll(`input[name='${name}']`).forEach(input => input.checked = set.has(input.value));
+    }
+    function persistCurrent() {
+      const item = currentCase();
+      if (!item) return;
+      const ann = currentAnnotation();
+      schema.likert.forEach(([f]) => ann[f] = document.querySelector(`input[name='${f}']:checked`)?.value || "");
+      schema.radios.forEach(([f]) => ann[f] = document.querySelector(`input[name='${f}']:checked`)?.value || "");
+      schema.checks.forEach(([f]) => ann[f] = checkedValues(f));
+      ann.notes = el("notes").value.trim();
+      ann.updated_at = new Date().toISOString();
+      state.annotations[item.token] = ann;
+      saveLocal();
+      renderNav();
+      renderStatus();
+    }
+    function renderCase() {
+      const item = currentCase();
+      const ann = currentAnnotation();
+      el("workspace").hidden = false;
+      el("leftImage").src = item.left_image;
+      el("frontImage").src = item.front_image;
+      el("rightImage").src = item.right_image;
+      el("bevImage").src = item.bev_gt;
+      el("caseOrder").textContent = `Case ${state.index + 1} / ${state.cases.length}`;
+      el("token").textContent = item.token;
+      el("actionGroup").textContent = item.action_group_label;
+      el("actionState").textContent = `${item.action_state || ""} ${item.velocity_state ? "/ " + item.velocity_state : ""}`;
+      el("question").textContent = item.question;
+      el("answer").textContent = item.answer;
+      const g = item.gpt_score || {};
+      el("gptSummary").innerHTML = [
+        `Final: <strong>${g.final_score ?? "N/A"}</strong>`,
+        `Decision: <strong>${g.decision_record_score ?? "N/A"}</strong>`,
+        `QA: <strong>${g.qa_extraction_score ?? "N/A"}</strong>`,
+        `Human review: <strong>${g.needs_human_review ?? "N/A"}</strong>`
+      ].join(" · ");
+      el("gptDetail").textContent = JSON.stringify({
+        decision_atoms: g.decision_atoms,
+        motion_atoms: g.motion_atoms,
+        subscores: g.subscores,
+        failure_tags: g.failure_tags,
+        diagnosis: g.diagnosis
+      }, null, 2);
+      schema.likert.forEach(([f]) => setRadio(f, ann[f]));
+      schema.radios.forEach(([f]) => setRadio(f, ann[f]));
+      schema.checks.forEach(([f]) => setChecks(f, ann[f]));
+      el("notes").value = ann.notes || "";
+      el("prevBtn").disabled = state.index === 0;
+      el("nextBtn").disabled = state.index === state.cases.length - 1;
+      renderNav();
+      renderStatus();
+    }
+    function renderNav() {
+      const nav = el("caseNav");
+      nav.innerHTML = "";
+      state.cases.forEach((item, idx) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = String(idx + 1);
+        btn.title = `${item.action_group_label}: ${item.token}`;
+        btn.className = [idx === state.index ? "active" : "", isDone(item.token) ? "done" : ""].filter(Boolean).join(" ");
+        btn.addEventListener("click", () => { persistCurrent(); state.index = idx; renderCase(); });
+        nav.appendChild(btn);
+      });
+    }
+    function renderStatus() {
+      const done = state.cases.filter(item => isDone(item.token)).length;
+      const groups = state.cases.reduce((acc, item) => (acc[item.action_group_label] = (acc[item.action_group_label] || 0) + 1, acc), {});
+      const submitHint = state.index === state.cases.length - 1 && allDone() ? " · ready to submit" : "";
+      el("status").textContent = `${done} / ${state.cases.length} completed · ${Object.entries(groups).map(([k,v]) => `${k}:${v}`).join(" ")}${submitHint}`;
+    }
+    function rowsForExport() {
+      persistCurrent();
+      return state.cases.map(item => ({ ...item, annotation: state.annotations[item.token] || emptyAnnotation(item.token) }));
+    }
+    function download(name, text, type) {
+      const blob = new Blob([text], { type });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+    function csvEscape(value) {
+      const text = typeof value === "object" ? JSON.stringify(value ?? "") : String(value ?? "");
+      return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+    }
+    function exportJsonl() {
+      download("navtest_human_eval_annotations.jsonl", rowsForExport().map(row => JSON.stringify(row)).join("\n") + "\n", "application/jsonl");
+    }
+    function submitJsonl() {
+      persistCurrent();
+      if (state.index !== state.cases.length - 1) {
+        alert("请先到第100页再提交。");
+        return;
+      }
+      if (!allDone()) {
+        alert("没有填完问卷。请完成第1到第100页的所有必填选项后再提交；Notes 可不填。");
+        return;
+      }
+      const stamp = new Date().toISOString().replaceAll(":", "-").replace(/\..+$/, "");
+      download(`navtest_human_eval_submit_${stamp}.jsonl`, rowsForExport().map(row => JSON.stringify(row)).join("\n") + "\n", "application/jsonl");
+    }
+    async function init() {
+      initForm();
+      loadLocal();
+      try {
+        const response = await fetch("manifest.json", { cache: "no-store" });
+        if (!response.ok) throw new Error(`manifest.json returned ${response.status}`);
+        state.cases = await response.json();
+        if (!Array.isArray(state.cases) || state.cases.length === 0) throw new Error("manifest.json is empty or invalid");
+      } catch (err) {
+        el("error").hidden = false;
+        el("error").innerHTML = `<strong>manifest.json is not loaded.</strong><br><br>Run the navtest build script first, then serve this directory over HTTP.<pre>python tools/build_navtest_human_eval.py --out-dir docs/navsim_human_eval_navtest --samples-per-action 20 --overwrite</pre><br>Browser error: ${err.message}`;
+        el("status").textContent = "Manifest not loaded";
+        return;
+      }
+      el("prevBtn").addEventListener("click", () => { persistCurrent(); state.index = Math.max(0, state.index - 1); renderCase(); });
+      el("nextBtn").addEventListener("click", () => { persistCurrent(); state.index = Math.min(state.cases.length - 1, state.index + 1); renderCase(); });
+      el("exportJsonlBtn").addEventListener("click", exportJsonl);
+      el("submitBtn").addEventListener("click", submitJsonl);
+      el("clearBtn").addEventListener("click", () => {
+        if (!confirm("Clear annotations stored in this browser?")) return;
+        state.annotations = {};
+        saveLocal();
+        renderCase();
+      });
+      document.addEventListener("keydown", event => {
+        if (event.target.matches("textarea,input,select")) return;
+        if (event.key === "ArrowLeft" && state.index > 0) el("prevBtn").click();
+        if (event.key === "ArrowRight" && state.index < state.cases.length - 1) el("nextBtn").click();
+      });
+      renderCase();
+    }
+    init();
+  </script>
+</body>
+</html>

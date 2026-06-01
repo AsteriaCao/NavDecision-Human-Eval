@@ -1,0 +1,36 @@
+{
+  "qa_json": "result_mid/text/result/stage2_rule_navtest_qa_en_train.json",
+  "gpt_jsonl": "/lpai/volumes/base-vla-ali-sh-mix/pengshaoyang/code/autolabeling/output/navism/report/navdecision_gpt_score.jsonl",
+  "config": "configs/sft_navsim/navsim_train.yaml",
+  "seed": 20260601,
+  "samples_per_action": 20,
+  "selection": "longest_answer",
+  "action_groups": {
+    "straight": [
+      "Intersection Straight",
+      "Keep",
+      "Straight"
+    ],
+    "turn_left": [
+      "Turn Left"
+    ],
+    "turn_right": [
+      "Turn Right"
+    ],
+    "change_lane": [
+      "Change Lane Left",
+      "Change Lane Right"
+    ],
+    "stop": [
+      "Pull Over",
+      "Stop"
+    ]
+  },
+  "bucket_sizes": {
+    "straight": 8548,
+    "turn_left": 1327,
+    "turn_right": 1066,
+    "change_lane": 1063,
+    "stop": 72
+  }
+}
